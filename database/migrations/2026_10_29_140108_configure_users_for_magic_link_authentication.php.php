@@ -14,7 +14,7 @@ return new class extends Migration
         Schema::table('users', function (Blueprint $table) {
             $table->string('name')->nullable()->change();
             $table->string('role', 50)->default('USER')->index();
-            $table->dropColumn(['email_verified_at', 'password', 'remember_token']);
+            $table->dropColumn(['password', 'remember_token']);
         });
 
         Schema::dropIfExists('password_reset_tokens');
@@ -28,7 +28,6 @@ return new class extends Migration
         Schema::table('users', function (Blueprint $table) {
             $table->dropIndex(['role']);
             $table->dropColumn('role');
-            $table->timestamp('email_verified_at')->nullable();
             $table->string('password')->nullable();
             $table->rememberToken();
         });
