@@ -2,6 +2,7 @@
 
 use App\Http\Controllers\Auth\MagicLinkController;
 use App\Http\Controllers\Auth\SessionController;
+use App\Http\Controllers\Reports\IncidentReportController;
 use Illuminate\Support\Facades\Route;
 
 Route::get('/', function () {
@@ -17,3 +18,7 @@ Route::prefix('api/auth')->name('auth.')->group(function (): void {
         Route::post('logout', [SessionController::class, 'destroy'])->name('logout');
     });
 });
+
+Route::post('api/cases/incident/report', [IncidentReportController::class, 'store'])
+    ->middleware('auth')
+    ->name('incidents.report');
