@@ -18,6 +18,8 @@
         "@laravel/multiplex": "^0.4.1"
     },
     "dependencies": {
+        "@primeuix/themes": "^3.1.0",
+        "primevue": "^5.0.4",
         "vue": "^3.5.44"
     }
 }
