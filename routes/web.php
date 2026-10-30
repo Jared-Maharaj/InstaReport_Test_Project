@@ -19,6 +19,11 @@ Route::prefix('api/auth')->name('auth.')->group(function (): void {
     });
 });
 
-Route::post('api/cases/incident/report', [IncidentReportController::class, 'store'])
-    ->middleware('auth')
-    ->name('incidents.report');
+Route::prefix('api/cases')->middleware('auth')->name('incidents.')->group(function (): void {
+    Route::post('incident/report', [IncidentReportController::class, 'store'])->name('report');
+    Route::get('/', [IncidentReportController::class, 'index'])->name('index');
+    Route::get('{reference}', [IncidentReportController::class, 'show'])->name('show');
+    Route::get('{reference}/photos/{photo}', [IncidentReportController::class, 'photo'])
+        ->whereNumber('photo')
+        ->name('photos.show');
+});
