@@ -2,6 +2,7 @@
 
 namespace App\Services;
 
+use App\Events\IncidentReported;
 use App\Models\Incident;
 use App\Models\User;
 use Illuminate\Http\UploadedFile;
@@ -20,7 +21,7 @@ class ReportIncident
         $paths = [];
 
         try {
-            return DB::transaction(function () use ($reporter, $data, $photos, $disk, &$paths): Incident {
+            $incident = DB::transaction(function () use ($reporter, $data, $photos, $disk, &$paths): Incident {
                 $incident = Incident::query()->create([
                     'reference' => 'INC-'.Str::ulid(),
                     'reporter_id' => $reporter->id,
@@ -67,5 +68,9 @@ class ReportIncident
 
             throw $exception;
         }
+
+        IncidentReported::dispatch($incident);
+
+        return $incident;
     }
 }
