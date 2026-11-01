@@ -5,6 +5,7 @@ import Button from 'primevue/button';
 import Card from 'primevue/card';
 import Column from 'primevue/column';
 import DataTable from 'primevue/datatable';
+import Dialog from 'primevue/dialog';
 import Menu from 'primevue/menu';
 import Message from 'primevue/message';
 import Skeleton from 'primevue/skeleton';
@@ -13,6 +14,7 @@ import Bell from '@primeicons/vue/bell';
 import CheckCircle from '@primeicons/vue/check-circle';
 import ChevronDown from '@primeicons/vue/chevron-down';
 import Clock from '@primeicons/vue/clock';
+import Eye from '@primeicons/vue/eye';
 import File from '@primeicons/vue/file';
 import Home from '@primeicons/vue/home';
 import Inbox from '@primeicons/vue/inbox';
@@ -22,6 +24,8 @@ import Shield from '@primeicons/vue/shield';
 import SignOut from '@primeicons/vue/sign-out';
 import User from '@primeicons/vue/user';
 import WavePulse from '@primeicons/vue/wave-pulse';
+
+import IncidentSummary from './IncidentSummary.vue';
 
 const IncidentReport = defineAsyncComponent(() => import('./IncidentReport.vue'));
 const activePage = ref('home');
@@ -37,6 +41,12 @@ const error = ref('');
 const accountError = ref('');
 const profileMenu = ref(null);
 let latestRequest = 0;
+const detailVisible = ref(false);
+const detailLoading = ref(false);
+const detailError = ref('');
+const selectedReference = ref('');
+const selectedCase = ref(null);
+let latestDetailRequest = 0;
 
 const name = computed(() => user.value?.name?.trim() || user.value?.email || 'Your account');
 const welcomeName = computed(() => user.value?.name?.trim().split(/\s+/)[0] || 'there');
@@ -69,6 +79,7 @@ async function api(url, method = 'GET') {
         window.location.replace('/');
         throw new Error('Your session has expired. Please sign in again.');
     }
+    if (response.status === 404) throw new Error('This report is no longer available.');
     if (!response.ok) {
         throw new Error(response.status === 419
             ? 'Your session has expired. Refresh this page and try again.'
@@ -97,6 +108,25 @@ async function loadCases(page = 1) {
         first.value = (meta.value.current_page - 1) * meta.value.per_page;
     } finally {
         if (request === latestRequest) loading.value = false;
+    }
+}
+
+async function viewCase(reference) {
+    const request = ++latestDetailRequest;
+    selectedReference.value = reference;
+    selectedCase.value = null;
+    detailError.value = '';
+    detailLoading.value = true;
+    detailVisible.value = true;
+    try {
+        const data = await api(`/api/cases/${encodeURIComponent(reference)}`);
+        if (request === latestDetailRequest) selectedCase.value = data.data;
+    } catch (exception) {
+        if (request === latestDetailRequest) detailError.value = exception instanceof TypeError
+            ? 'We couldn’t connect. Check your connection and try again.'
+            : exception.message;
+    } finally {
+        if (request === latestDetailRequest) detailLoading.value = false;
     }
 }
 
@@ -237,6 +267,9 @@ onMounted(() => {
                             <Column field="address" header="Location"><template #body="{ data }"><span class="block max-w-44 truncate text-sm text-slate-500" :title="data.address">{{ data.address }}</span></template></Column>
                             <Column field="created_at" header="Date reported"><template #body="{ data }"><time :datetime="data.created_at" class="text-xs whitespace-nowrap text-slate-500">{{ dateFormat.format(new Date(data.created_at)) }}</time></template></Column>
                             <Column field="status" header="Status"><template #body="{ data }"><Tag :severity="statusSeverity[data.status] ?? 'secondary'" :value="label(data.status)" /></template></Column>
+                            <Column header="View" style="width: 4rem">
+                                <template #body="{ data }"><Button text rounded :aria-label="`View report ${data.reference}`" aria-controls="case-detail" :aria-expanded="detailVisible && selectedReference === data.reference" @click="viewCase(data.reference)"><Eye :size="18" /></Button></template>
+                            </Column>
                         </DataTable>
                     </section>
                     </template>
@@ -244,5 +277,10 @@ onMounted(() => {
                 </div>
             </main>
         </div>
+        <Dialog id="case-detail" v-model:visible="detailVisible" modal dismissable-mask block-scroll :draggable="false" header="Incident report details" class="w-[calc(100vw-2rem)] max-w-4xl" :pt="{ mask: { class: 'backdrop-blur-sm' } }">
+            <div v-if="detailLoading" role="status" aria-label="Loading report" class="space-y-5 py-4"><Skeleton height="8rem" /><Skeleton height="14rem" /></div>
+            <Message v-else-if="detailError" severity="error">{{ detailError }}<Button text size="small" @click="viewCase(selectedReference)">Try again</Button></Message>
+            <IncidentSummary v-else-if="selectedCase" :key="selectedCase.reference" :incident="selectedCase" :user="user" download-photos />
+        </Dialog>
     </div>
 </template>

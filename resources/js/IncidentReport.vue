@@ -19,8 +19,6 @@ import Tag from 'primevue/tag';
 import Textarea from 'primevue/textarea';
 import ArrowLeft from '@primeicons/vue/arrow-left';
 import ArrowRight from '@primeicons/vue/arrow-right';
-import CheckCircle from '@primeicons/vue/check-circle';
-import Copy from '@primeicons/vue/copy';
 import Home from '@primeicons/vue/home';
 import Images from '@primeicons/vue/images';
 import Pencil from '@primeicons/vue/pencil';
@@ -31,7 +29,9 @@ import Spinner from '@primeicons/vue/spinner';
 import Times from '@primeicons/vue/times';
 import Wrench from '@primeicons/vue/wrench';
 
-const props = defineProps({ user: Object });
+import IncidentSummary from './IncidentSummary.vue';
+
+defineProps({ user: Object });
 const emit = defineEmits(['home', 'busy']);
 const initial = () => ({ type: null, category: null, severity: null, description: '', address: '', latitude: null, longitude: null, occurred_at: null });
 const form = reactive(initial());
@@ -40,7 +40,6 @@ const errors = ref({});
 const requestError = ref('');
 const pending = ref(false);
 const saved = ref(null);
-const copyFeedback = ref('');
 const photos = ref([]);
 const uploader = ref(null);
 const heading = ref(null);
@@ -57,23 +56,19 @@ const fieldSteps = { type: 1, category: 1, severity: 1, description: 1, address:
 const dateFormat = new Intl.DateTimeFormat('en-ZA', { dateStyle: 'medium', timeStyle: 'short' });
 const categoryOptions = computed(() => (categories[form.type] ?? []).map(value => ({ label: label(value), value })));
 const photoErrors = computed(() => Object.entries(errors.value).filter(([key, value]) => key.startsWith('photos') && value).map(([, value]) => value));
-const details = computed(() => saved.value ?? form);
 const sections = computed(() => [
     { title: 'Incident details', step: 1, rows: [
-        ['Type', label(details.value.type)], ['Category', label(details.value.category)],
-        ...(details.value.type === 'SECURITY' ? [['Severity', label(details.value.severity)]] : []),
-        ['Description', details.value.description],
+        ['Type', label(form.type)], ['Category', label(form.category)],
+        ...(form.type === 'SECURITY' ? [['Severity', label(form.severity)]] : []),
+        ['Description', form.description],
     ] },
     { title: 'Location & time', step: 2, rows: [
-        ['Address', details.value.address],
-        ['Coordinates', details.value.latitude != null && details.value.longitude != null ? `${details.value.latitude}, ${details.value.longitude}` : 'Not provided'],
-        ['Occurred at', formatDate(details.value.occurred_at)],
-        ...(saved.value ? [['Reported at', formatDate(saved.value.created_at)], ['Reported by', props.user?.name || props.user?.email || 'Your account']] : []),
+        ['Address', form.address],
+        ['Coordinates', form.latitude != null && form.longitude != null ? `${form.latitude}, ${form.longitude}` : 'Not provided'],
+        ['Occurred at', formatDate(form.occurred_at)],
     ] },
 ]);
-const previews = computed(() => saved.value
-    ? saved.value.photos.map(photo => ({ name: photo.original_name || 'Incident photo', size: photo.size, src: `/api/cases/${encodeURIComponent(saved.value.reference)}/photos/${photo.id}` }))
-    : photos.value.map(file => ({ name: file.name, size: file.size, src: file.objectURL })));
+const previews = computed(() => photos.value.map(file => ({ name: file.name, size: file.size, src: file.objectURL })));
 
 watch(() => form.type, () => {
     form.category = null;
@@ -158,20 +153,10 @@ function reset() {
     clearPhotos();
     Object.assign(form, initial());
     saved.value = null;
-    copyFeedback.value = '';
     errors.value = {};
     requestError.value = '';
     step.value = 1;
     focusStep();
-}
-async function copyReference() {
-    copyFeedback.value = '';
-    try {
-        await navigator.clipboard.writeText(saved.value.reference);
-        copyFeedback.value = 'Copied to clipboard.';
-    } catch {
-        copyFeedback.value = 'Copy unavailable. Select the reference and copy it manually.';
-    }
 }
 async function submitReport() {
     if (pending.value || saved.value) return;
@@ -243,36 +228,12 @@ onBeforeUnmount(clearPhotos);
             <p class="mt-2 text-sm text-slate-500">{{ saved ? 'Thank you for helping make your community safer and more responsive.' : 'Tell us what happened. A few clear details can make a real difference.' }}</p>
         </header>
 
-        <Card v-if="saved" class="border border-emerald-200 shadow-none!" :pt="{ body: { class: 'p-5! sm:p-8!' } }">
-            <template #content>
-                <div class="mb-7 flex items-start gap-4 rounded-xl bg-emerald-50 p-5">
-                    <span class="text-emerald-500"><CheckCircle :size="38" /></span>
-                    <div class="min-w-0 flex-1">
-                        <p class="text-sm font-medium text-emerald-800">Your case reference</p>
-                        <div class="mt-2 flex items-center gap-2">
-                            <p class="min-w-0 break-all font-mono text-base font-semibold text-slate-900 sm:text-xl">{{ saved.reference }}</p>
-                            <Button type="button" text rounded icon-only severity="secondary" class="shrink-0" aria-label="Copy case reference" title="Copy case reference" @click="copyReference"><Copy :size="18" /></Button>
-                        </div>
-                        <p v-if="copyFeedback" role="status" class="mt-1 text-xs text-emerald-800">{{ copyFeedback }}</p>
-                        <div class="mt-3 flex flex-wrap items-center gap-2"><Tag :value="saved.status" severity="warn" /><span class="text-xs text-emerald-800">Your report has been received.</span></div>
-                    </div>
-                </div>
-                <div class="grid gap-7 sm:grid-cols-2">
-                    <section v-for="section in sections" :key="section.title">
-                        <h2 class="mb-4 font-semibold text-slate-900">{{ section.title }}</h2>
-                        <dl class="grid gap-3 text-sm"><div v-for="[key, value] in section.rows" :key="key"><dt class="text-xs text-slate-500">{{ key }}</dt><dd class="mt-1 min-w-0 break-words whitespace-pre-wrap text-slate-800">{{ value }}</dd></div></dl>
-                    </section>
-                </div>
-                <section v-if="previews.length" class="mt-7 border-t border-slate-100 pt-6">
-                    <h2 class="mb-4 font-semibold">Attached photos ({{ previews.length }})</h2>
-                    <div class="grid grid-cols-2 gap-3 sm:grid-cols-3"><figure v-for="photo in previews" :key="photo.src"><img :src="photo.src" :alt="photo.name" class="aspect-video w-full rounded-lg object-cover"><figcaption class="mt-2 truncate text-xs text-slate-500" :title="photo.name">{{ photo.name }}</figcaption></figure></div>
-                </section>
-                <div class="mt-8 flex flex-wrap gap-3 border-t border-slate-100 pt-6">
-                    <Button type="button" outlined class="flex-1" @click="emit('home')"><Home :size="17" />Back to home</Button>
-                    <Button type="button" class="flex-1" @click="reset"><Plus :size="17" />Report another incident</Button>
-                </div>
+        <IncidentSummary v-if="saved" :incident="saved" :user="user">
+            <template #actions>
+                <Button type="button" outlined class="flex-1" @click="emit('home')"><Home :size="17" />Back to home</Button>
+                <Button type="button" class="flex-1" @click="reset"><Plus :size="17" />Report another incident</Button>
             </template>
-        </Card>
+        </IncidentSummary>
 
         <form v-else novalidate :aria-busy="pending" @submit.prevent="step === 4 ? submitReport() : goTo(step + 1)">
             <Stepper :value="step" linear>
