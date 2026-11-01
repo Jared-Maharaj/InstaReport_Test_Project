@@ -25,6 +25,11 @@ class IncidentResource extends JsonResource
             'longitude' => $this->longitude,
             'occurred_at' => $this->occurred_at->toIso8601String(),
             'created_at' => $this->created_at->toIso8601String(),
+            'reporter' => $this->whenLoaded('reporter', fn (): array => [
+                'id' => $this->reporter->id,
+                'name' => $this->reporter->name,
+                'email' => $this->reporter->email,
+            ]),
             'photos' => $this->photos->map(fn (IncidentPhoto $photo): array => [
                 'id' => $photo->id,
                 'original_name' => $photo->original_name,

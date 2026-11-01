@@ -2,12 +2,14 @@
 
 use App\Http\Controllers\Auth\MagicLinkController;
 use App\Http\Controllers\Auth\SessionController;
+use App\Http\Controllers\Reports\LocationController;
+use App\Http\Controllers\Reports\AreaReportController;
 use App\Http\Controllers\Reports\IncidentReportController;
 use Illuminate\Support\Facades\Route;
 
-Route::get('/', function () {
-    return view('welcome');
-})->name('home');
+Route::view('/', 'app')->name('home');
+
+Route::get('api/locations', LocationController::class)->middleware('auth')->name('locations.search');
 
 Route::prefix('api/auth')->name('auth.')->group(function (): void {
     Route::post('magiclink', [MagicLinkController::class, 'store'])->name('magiclink.request');
@@ -26,4 +28,11 @@ Route::prefix('api/cases')->middleware('auth')->name('incidents.')->group(functi
     Route::get('{reference}/photos/{photo}', [IncidentReportController::class, 'photo'])
         ->whereNumber('photo')
         ->name('photos.show');
+});
+
+Route::prefix('api/area/reports')->middleware(['auth', 'can:view-area-reports'])->name('area.reports.')->group(function (): void {
+    Route::get('/', [AreaReportController::class, 'index'])->name('index');
+    Route::get('{reference}', [AreaReportController::class, 'show'])->name('show');
+    Route::get('{reference}/photos/{photo}', [AreaReportController::class, 'photo'])
+        ->whereNumber('photo')->name('photos.show');
 });
