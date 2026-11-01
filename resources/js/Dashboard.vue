@@ -29,6 +29,7 @@ import WavePulse from '@primeicons/vue/wave-pulse';
 import Users from '@primeicons/vue/users';
 
 import IncidentSummary from './IncidentSummary.vue';
+import { request } from './request.js';
 
 const IncidentReport = defineAsyncComponent(() => import('./IncidentReport.vue'));
 const activePage = ref('home');
@@ -77,24 +78,10 @@ function label(value) {
 }
 
 async function api(url, method = 'GET') {
-    const headers = { Accept: 'application/json' };
-    if (method === 'POST') {
-        const cookie = document.cookie.split('; ').find((value) => value.startsWith('XSRF-TOKEN='));
-        if (!cookie) {
-            throw new Error('Your session has expired. Refresh this page to sign in again.');
-        }
-        headers['X-XSRF-TOKEN'] = decodeURIComponent(cookie.slice('XSRF-TOKEN='.length));
-    }
-
-    const response = await fetch(url, { method, headers, credentials: 'same-origin' });
-    if (response.status === 401) {
-        window.location.replace('/');
-        throw new Error('Your session has expired. Please sign in again.');
-    }
+    const { response, data } = await request(url, { method });
     if (response.status === 403) throw new Error('You don’t have permission to access Area Reports.');
     if (response.status === 422) {
-        const data = await response.json();
-        throw new Error(Object.values(data.errors ?? {}).flat().join(' ') || 'Check your filters and try again.');
+        throw new Error(Object.values(data?.errors ?? {}).flat().join(' ') || 'Check your filters and try again.');
     }
     if (response.status === 404) throw new Error('This report is no longer available.');
     if (!response.ok) {
@@ -102,7 +89,7 @@ async function api(url, method = 'GET') {
             ? 'Your session has expired. Refresh this page and try again.'
             : 'We couldn’t complete that request. Please try again.');
     }
-    return response.json();
+    return data;
 }
 
 async function loadCases(page = 1) {

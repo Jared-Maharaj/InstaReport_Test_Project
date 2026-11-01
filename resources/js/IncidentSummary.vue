@@ -7,38 +7,17 @@ import Tag from 'primevue/tag';
 import CheckCircle from '@primeicons/vue/check-circle';
 import Copy from '@primeicons/vue/copy';
 import Download from '@primeicons/vue/download';
+import IncidentDetails from './IncidentDetails.vue';
+import { request } from './request.js';
 
 const props = defineProps({ incident: { type: Object, required: true }, user: Object, downloadPhotos: Boolean, casesEndpoint: { type: String, default: '/api/cases' } });
 const copyFeedback = ref('');
 const downloading = ref(null);
 const downloadError = ref('');
 const statusSeverity = { OPEN: 'warn', IN_PROGRESS: 'info', RESOLVED: 'success', CLOSED: 'secondary' };
-const dateFormat = new Intl.DateTimeFormat('en-ZA', { dateStyle: 'medium', timeStyle: 'short' });
-const reporter = computed(() => props.incident.reporter ?? props.user);
-const sections = computed(() => [
-    { title: 'Incident details', rows: [
-        ['Type', label(props.incident.type)], ['Category', label(props.incident.category)],
-        ...(props.incident.type === 'SECURITY' ? [['Severity', label(props.incident.severity)]] : []),
-        ['Description', props.incident.description],
-    ] },
-    { title: 'Location & time', rows: [
-        ['Address', props.incident.address],
-        ['Coordinates', props.incident.latitude != null && props.incident.longitude != null ? `${props.incident.latitude}, ${props.incident.longitude}` : 'Not provided'],
-        ['Occurred at', formatDate(props.incident.occurred_at)],
-        ['Reported at', formatDate(props.incident.created_at)],
-        ['Reported by', reporter.value?.name || reporter.value?.email || 'Your account'],
-        ...(props.incident.reporter ? [['Reporter email', props.incident.reporter.email]] : []),
-    ] },
-]);
 const photoUrl = (photo) => `${props.casesEndpoint}/${encodeURIComponent(props.incident.reference)}/photos/${photo.id}`;
 const previews = computed(() => props.incident.photos.map(photo => ({ name: photo.original_name || 'Incident photo', src: photoUrl(photo) })));
 
-function label(value) {
-    return value ? value.toLowerCase().replaceAll('_', ' ').replace(/\b\w/g, letter => letter.toUpperCase()) : 'Not provided';
-}
-function formatDate(value) {
-    return value ? dateFormat.format(new Date(value)) : 'Not provided';
-}
 function sizeLabel(bytes) {
     return bytes < 1048576 ? `${Math.ceil(bytes / 1024)} KB` : `${(bytes / 1048576).toFixed(1)} MB`;
 }
@@ -56,13 +35,9 @@ async function download(photo) {
     downloading.value = photo.id;
     downloadError.value = '';
     try {
-        const response = await fetch(photoUrl(photo), { credentials: 'same-origin' });
-        if (response.status === 401) {
-            window.location.replace('/');
-            return;
-        }
+        const { response, data } = await request(photoUrl(photo), { responseType: 'blob' });
         if (!response.ok) throw new Error('Photo unavailable');
-        const url = URL.createObjectURL(await response.blob());
+        const url = URL.createObjectURL(data);
         const link = document.createElement('a');
         link.href = url;
         link.download = photo.original_name || `incident-photo-${photo.id}`;
@@ -70,7 +45,8 @@ async function download(photo) {
         link.click();
         link.remove();
         setTimeout(() => URL.revokeObjectURL(url), 1000);
-    } catch {
+    } catch (exception) {
+        if (exception.status === 401) return;
         downloadError.value = 'We couldn’t download this photo. Please try again.';
     } finally {
         downloading.value = null;
@@ -93,12 +69,7 @@ async function download(photo) {
                     <div class="mt-3 flex flex-wrap items-center gap-2"><Tag :value="incident.status" :severity="statusSeverity[incident.status] ?? 'secondary'" /><span v-if="!downloadPhotos" class="text-xs text-emerald-800">Your report has been received.</span></div>
                 </div>
             </div>
-            <div class="grid gap-7 sm:grid-cols-2">
-                <section v-for="section in sections" :key="section.title">
-                    <h2 class="mb-4 font-semibold text-slate-900">{{ section.title }}</h2>
-                    <dl class="grid gap-3 text-sm"><div v-for="[key, value] in section.rows" :key="key"><dt class="text-xs text-slate-500">{{ key }}</dt><dd class="mt-1 min-w-0 break-words whitespace-pre-wrap text-slate-800">{{ value }}</dd></div></dl>
-                </section>
-            </div>
+            <IncidentDetails :incident="incident" :user="user" />
             <section v-if="previews.length" class="mt-7 border-t border-slate-100 pt-6">
                 <h2 class="mb-4 font-semibold">Attached photos ({{ previews.length }})</h2>
                 <ul v-if="downloadPhotos" class="divide-y divide-slate-100">

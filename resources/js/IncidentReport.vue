@@ -32,6 +32,8 @@ import Wrench from '@primeicons/vue/wrench';
 
 import IncidentSummary from './IncidentSummary.vue';
 import LocationMap from './LocationMap.vue';
+import IncidentDetails from './IncidentDetails.vue';
+import { request } from './request.js';
 
 defineProps({ user: Object });
 const emit = defineEmits(['home', 'busy']);
@@ -62,21 +64,8 @@ const types = [
 ];
 const steps = ['Incident details', 'Location & time', 'Photos', 'Review'];
 const fieldSteps = { type: 1, category: 1, severity: 1, description: 1, address: 2, latitude: 2, longitude: 2, occurred_at: 2, photos: 3 };
-const dateFormat = new Intl.DateTimeFormat('en-ZA', { dateStyle: 'medium', timeStyle: 'short' });
 const categoryOptions = computed(() => (categories[form.type] ?? []).map(value => ({ label: label(value), value })));
 const photoErrors = computed(() => Object.entries(errors.value).filter(([key, value]) => key.startsWith('photos') && value).map(([, value]) => value));
-const sections = computed(() => [
-    { title: 'Incident details', step: 1, rows: [
-        ['Type', label(form.type)], ['Category', label(form.category)],
-        ...(form.type === 'SECURITY' ? [['Severity', label(form.severity)]] : []),
-        ['Description', form.description],
-    ] },
-    { title: 'Location & time', step: 2, rows: [
-        ['Address', form.address],
-        ['Coordinates', form.latitude != null && form.longitude != null ? `${form.latitude}, ${form.longitude}` : 'Not provided'],
-        ['Occurred at', formatDate(form.occurred_at)],
-    ] },
-]);
 const previews = computed(() => photos.value.map(file => ({ name: file.name, size: file.size, src: file.objectURL })));
 
 watch(() => form.type, () => {
@@ -113,28 +102,21 @@ async function findLocation() {
         errors.value.address = 'Enter an address of up to 1,000 characters to search.';
         return;
     }
-    const request = ++locationRequest;
+    const lookup = ++locationRequest;
     locationLoading.value = true;
     locationResults.value = [];
     selectedLocation.value = null;
     try {
-        const response = await fetch(`/api/locations?${new URLSearchParams({ address })}`, {
-            credentials: 'same-origin', headers: { Accept: 'application/json' },
-        });
-        if (request !== locationRequest) return;
-        if (response.status === 401) {
-            window.location.replace('/');
-            return;
-        }
+        const { response, data } = await request(`/api/locations?${new URLSearchParams({ address })}`);
+        if (lookup !== locationRequest) return;
         if (!response.ok) throw new Error('Lookup failed');
-        const data = await response.json();
-        if (request !== locationRequest) return;
         locationResults.value = data.data;
         if (!data.data.length) locationError.value = 'No matching addresses found. Try adding a town or landmark, or continue with your address.';
-    } catch {
-        if (request === locationRequest) locationError.value = 'We couldn’t look up this address. Try again, or enter coordinates manually. You can also continue without them.';
+    } catch (exception) {
+        if (exception.status === 401) return;
+        if (lookup === locationRequest) locationError.value = 'We couldn’t look up this address. Try again, or enter coordinates manually. You can also continue without them.';
     } finally {
-        if (request === locationRequest) locationLoading.value = false;
+        if (lookup === locationRequest) locationLoading.value = false;
     }
 }
 
@@ -146,9 +128,6 @@ function selectLocation() {
 
 function label(value) {
     return value ? value.toLowerCase().replaceAll('_', ' ').replace(/\b\w/g, letter => letter.toUpperCase()) : 'Not provided';
-}
-function formatDate(value) {
-    return value ? dateFormat.format(new Date(value)) : 'Not provided';
 }
 function sizeLabel(bytes) {
     return bytes < 1048576 ? `${Math.ceil(bytes / 1024)} KB` : `${(bytes / 1048576).toFixed(1)} MB`;
@@ -224,11 +203,6 @@ async function submitReport() {
         await focusStep(true);
         return;
     }
-    const cookie = document.cookie.split('; ').find(value => value.startsWith('XSRF-TOKEN='));
-    if (!cookie) {
-        requestError.value = 'Your session has expired. Keep a copy of your details, then refresh this page to sign in again.';
-        return;
-    }
     const body = new FormData();
     for (const field of ['type', 'category', 'description', 'address']) body.append(field, form[field].trim());
     if (form.type === 'SECURITY') body.append('severity', form.severity);
@@ -242,15 +216,7 @@ async function submitReport() {
     emit('busy', true);
     requestError.value = '';
     try {
-        const response = await fetch('/api/cases/incident/report', {
-            method: 'POST', credentials: 'same-origin', body,
-            headers: { Accept: 'application/json', 'X-XSRF-TOKEN': decodeURIComponent(cookie.slice('XSRF-TOKEN='.length)) },
-        });
-        const data = await response.json().catch(() => null);
-        if (response.status === 401) {
-            window.location.replace('/');
-            return;
-        }
+        const { response, data } = await request('/api/cases/incident/report', { method: 'POST', body });
         if (response.status === 422) {
             errors.value = Object.fromEntries(Object.entries(data?.errors ?? {}).map(([field, messages]) => [field, messages[0]]));
             step.value = fieldSteps[Object.keys(errors.value)[0]?.split('.')[0]] ?? 4;
@@ -269,8 +235,11 @@ async function submitReport() {
             clearPhotos();
             await focusStep();
         }
-    } catch {
-        requestError.value = 'We couldn’t confirm submission. Check your connection and your reports on Home before trying again.';
+    } catch (exception) {
+        if (exception.status === 401) return;
+        requestError.value = exception.status === 419
+            ? 'Your session has expired. Keep a copy of your details, then refresh this page to sign in again.'
+            : 'We couldn’t confirm submission. Check your connection and your reports on Home before trying again.';
     } finally {
         pending.value = false;
         emit('busy', false);
@@ -373,10 +342,7 @@ onBeforeUnmount(() => {
                             <StepPanel :value="4">
                                 <h2 class="text-lg font-semibold text-slate-900">Review your report</h2>
                                 <p class="mt-1 text-sm text-slate-500">Check the details below before sending your report.</p>
-                                <section v-for="section in sections" :key="section.title" class="mt-6 border-b border-slate-100 pb-6">
-                                    <div class="mb-4 flex items-center justify-between gap-3"><h3 class="font-semibold">{{ section.title }}</h3><Button type="button" text size="small" :disabled="pending" :aria-label="`Edit ${section.title.toLowerCase()}`" @click="goTo(section.step)"><Pencil :size="14" />Edit</Button></div>
-                                    <dl class="grid gap-4 text-sm"><div v-for="[key, value] in section.rows" :key="key" class="grid gap-1 sm:grid-cols-[9rem_1fr]"><dt class="text-slate-500">{{ key }}</dt><dd class="min-w-0 break-words whitespace-pre-wrap text-slate-800">{{ value }}</dd></div></dl>
-                                </section>
+                                <IncidentDetails :incident="form" review :disabled="pending" @edit="goTo" />
                                 <section class="mt-5"><div class="mb-4 flex items-center justify-between gap-3"><h3 class="font-semibold">Photos ({{ previews.length }})</h3><Button type="button" text size="small" :disabled="pending" aria-label="Edit photos" @click="goTo(3)"><Pencil :size="14" />Edit</Button></div><p v-if="!previews.length" class="text-sm text-slate-500">No photos attached.</p><div v-else class="grid grid-cols-2 gap-3 sm:grid-cols-3"><figure v-for="photo in previews" :key="photo.src"><img :src="photo.src" :alt="photo.name" class="aspect-video w-full rounded-lg object-cover"><figcaption class="mt-2 truncate text-xs text-slate-500" :title="photo.name">{{ photo.name }} · {{ sizeLabel(photo.size) }}</figcaption></figure></div></section>
                             </StepPanel>
                         </StepPanels>

@@ -15,6 +15,7 @@ import MapMarker from '@primeicons/vue/map-marker';
 import Shield from '@primeicons/vue/shield';
 import Spinner from '@primeicons/vue/spinner';
 import Users from '@primeicons/vue/users';
+import { request } from './request.js';
 
 const email = ref('');
 const emailInput = ref(null);
@@ -42,27 +43,12 @@ async function sendLink() {
         return;
     }
 
-    const csrfCookie = document.cookie.split('; ').find((cookie) => cookie.startsWith('XSRF-TOKEN='));
-
-    if (!csrfCookie) {
-        requestError.value = 'Your session has expired. Refresh this page and try again.';
-        return;
-    }
-
     pending.value = true;
 
     try {
-        const response = await fetch('/api/auth/magiclink', {
-            method: 'POST',
-            credentials: 'same-origin',
-            headers: {
-                Accept: 'application/json',
-                'Content-Type': 'application/json',
-                'X-XSRF-TOKEN': decodeURIComponent(csrfCookie.slice('XSRF-TOKEN='.length)),
-            },
-            body: JSON.stringify({ email: email.value }),
+        const { response, data } = await request('/api/auth/magiclink', {
+            method: 'POST', body: { email: email.value }, authenticated: false,
         });
-        const data = await response.json().catch(() => null);
 
         if (response.ok) {
             confirmation.value = data?.message ?? 'If this email is registered, a sign-in link will be sent shortly.';
@@ -79,8 +65,10 @@ async function sendLink() {
         } else {
             requestError.value = 'We couldn’t send your link right now. Please try again shortly.';
         }
-    } catch {
-        requestError.value = 'We couldn’t connect. Check your internet connection and try again.';
+    } catch (exception) {
+        requestError.value = exception.status === 419
+            ? 'Your session has expired. Refresh this page and try again.'
+            : 'We couldn’t connect. Check your internet connection and try again.';
     } finally {
         pending.value = false;
     }
