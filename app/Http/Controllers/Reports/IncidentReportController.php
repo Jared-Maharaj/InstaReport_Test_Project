@@ -16,14 +16,24 @@ class IncidentReportController extends Controller
 {
     public function index(Request $request): JsonResponse
     {
-        $incidents = Incident::query()
-            ->whereBelongsTo($request->user(), 'reporter')
+        $query = Incident::query()->whereBelongsTo($request->user(), 'reporter');
+        $counts = (clone $query)->selectRaw('status, COUNT(*) as total')
+            ->groupBy('status')->pluck('total', 'status');
+
+        $incidents = $query
             ->with('photos')
             ->orderByDesc('created_at')
             ->orderByDesc('id')
             ->paginate(15);
 
-        return IncidentResource::collection($incidents)->response()->header('Cache-Control', 'no-store, private');
+        return IncidentResource::collection($incidents)->additional([
+            'summary' => [
+                'total' => (int) $counts->sum(),
+                'open' => (int) $counts->get('OPEN', 0),
+                'in_progress' => (int) $counts->get('IN_PROGRESS', 0),
+                'resolved' => (int) $counts->get('RESOLVED', 0),
+            ],
+        ])->response()->header('Cache-Control', 'no-store, private');
     }
 
     public function show(Request $request, string $reference): JsonResponse
