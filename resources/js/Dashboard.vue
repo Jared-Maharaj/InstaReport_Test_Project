@@ -1,5 +1,5 @@
 <script setup>
-import { computed, onMounted, ref } from 'vue';
+import { computed, defineAsyncComponent, onMounted, ref } from 'vue';
 import Avatar from 'primevue/avatar';
 import Button from 'primevue/button';
 import Card from 'primevue/card';
@@ -23,6 +23,9 @@ import SignOut from '@primeicons/vue/sign-out';
 import User from '@primeicons/vue/user';
 import WavePulse from '@primeicons/vue/wave-pulse';
 
+const IncidentReport = defineAsyncComponent(() => import('./IncidentReport.vue'));
+const activePage = ref('home');
+const reportBusy = ref(false);
 const user = ref(null);
 const reports = ref([]);
 const summary = ref(null);
@@ -105,8 +108,18 @@ async function loadUser() {
     }
 }
 
+function showHome() {
+    if (reportBusy.value) return;
+    activePage.value = 'home';
+    loadCases(1);
+}
+
+function showReport() {
+    if (!reportBusy.value) activePage.value = 'report';
+}
+
 async function logout() {
-    if (loggingOut.value) return;
+    if (loggingOut.value || reportBusy.value) return;
     loggingOut.value = true;
     accountError.value = '';
     try {
@@ -135,7 +148,7 @@ onMounted(() => {
                     <Bell :size="20" />
                 </Button>
                 <div class="h-7 w-px bg-slate-200" aria-hidden="true"></div>
-                <Button text severity="secondary" :disabled="loggingOut" aria-label="Account menu" aria-haspopup="menu" aria-controls="profile-menu" @click="profileMenu.toggle($event)">
+                <Button text severity="secondary" :disabled="loggingOut || reportBusy" aria-label="Account menu" aria-haspopup="menu" aria-controls="profile-menu" @click="profileMenu.toggle($event)">
                     <Avatar shape="circle" class="bg-blue-100! text-blue-700!"><User :size="18" /></Avatar>
                     <span class="hidden max-w-48 truncate text-sm font-semibold sm:block">{{ name }}</span>
                     <ChevronDown :size="12" />
@@ -151,8 +164,8 @@ onMounted(() => {
         <div class="flex min-h-0 flex-1">
             <aside class="hidden w-56 shrink-0 flex-col justify-between border-r border-slate-200/80 bg-white px-4 py-7 md:flex">
                 <nav aria-label="Main navigation" class="flex flex-col gap-2">
-                    <Button text class="justify-start! bg-blue-50! text-blue-700!" aria-current="page" @click="loadCases(1)"><Home :size="19" /><span>Home</span></Button>
-                    <Button text severity="secondary" class="justify-start!" disabled title="Report incident coming soon"><Plus :size="19" /><span>Report incident</span></Button>
+                    <Button text class="justify-start!" :class="activePage === 'home' ? 'bg-blue-50! text-blue-700!' : 'text-slate-500!'" :aria-current="activePage === 'home' ? 'page' : undefined" :disabled="reportBusy" @click="showHome"><Home :size="19" /><span>Home</span></Button>
+                    <Button text severity="secondary" class="justify-start!" :class="activePage === 'report' ? 'bg-blue-50! text-blue-700!' : ''" :aria-current="activePage === 'report' ? 'page' : undefined" :disabled="reportBusy" @click="showReport"><Plus :size="19" /><span>Report incident</span></Button>
                 </nav>
                 <div class="flex items-start gap-3 rounded-xl bg-slate-50 p-4 text-xs leading-relaxed text-slate-500">
                     <span class="text-blue-500"><Shield :size="20" /></span>
@@ -163,32 +176,33 @@ onMounted(() => {
             <main class="min-w-0 flex-1 overflow-y-auto p-4 sm:p-7 lg:p-10">
                 <div class="mx-auto flex max-w-7xl flex-col gap-7">
                     <nav aria-label="Main navigation" class="flex gap-2 md:hidden">
-                        <Button text size="small" aria-current="page" @click="loadCases(1)"><Home :size="16" />Home</Button>
-                        <Button text size="small" severity="secondary" disabled title="Report incident coming soon"><Plus :size="16" />Report incident</Button>
+                        <Button text size="small" :class="activePage === 'home' ? 'bg-blue-50! text-blue-700!' : 'text-slate-500!'" :aria-current="activePage === 'home' ? 'page' : undefined" :disabled="reportBusy" @click="showHome"><Home :size="16" />Home</Button>
+                        <Button text size="small" severity="secondary" :class="activePage === 'report' ? 'bg-blue-50! text-blue-700!' : ''" :aria-current="activePage === 'report' ? 'page' : undefined" :disabled="reportBusy" @click="showReport"><Plus :size="16" />Report incident</Button>
                     </nav>
 
-                    <div class="flex flex-wrap items-center justify-between gap-5">
-                        <div>
-                            <p class="mb-2 text-xs font-semibold tracking-[0.16em] text-blue-600 uppercase">Your community dashboard</p>
-                            <h1 class="text-2xl font-semibold tracking-tight text-slate-900 sm:text-3xl">Welcome back, {{ welcomeName }}</h1>
-                            <p class="mt-2 text-sm text-slate-500">Here’s an overview of the reports you’ve submitted.</p>
-                        </div>
-                        <Button disabled title="Report incident coming soon"><Plus :size="18" /><span>Report incident</span></Button>
-                    </div>
-
                     <Message v-if="accountError" severity="error">{{ accountError }}</Message>
+                    <IncidentReport v-if="activePage === 'report'" :user="user" @home="showHome" @busy="reportBusy = $event" />
+                    <template v-else>
+                        <div class="flex flex-wrap items-center justify-between gap-5">
+                            <div>
+                                <p class="mb-2 text-xs font-semibold tracking-[0.16em] text-blue-600 uppercase">Your community dashboard</p>
+                                <h1 class="text-2xl font-semibold tracking-tight text-slate-900 sm:text-3xl">Welcome back, {{ welcomeName }}</h1>
+                                <p class="mt-2 text-sm text-slate-500">Here’s an overview of the reports you’ve submitted.</p>
+                            </div>
+                            <Button @click="showReport"><Plus :size="18" /><span>Report incident</span></Button>
+                        </div>
 
-                    <section aria-label="Report overview" class="grid grid-cols-2 gap-3 lg:grid-cols-4 lg:gap-5">
-                        <Card v-for="tile in tiles" :key="tile.key" class="border border-slate-200/60 shadow-none!" :pt="{ body: { class: 'p-4! lg:p-5!' } }">
-                            <template #content>
-                                <div class="flex items-center gap-3 lg:gap-4">
-                                    <span class="flex size-10 shrink-0 items-center justify-center rounded-xl lg:size-12" :class="tile.color"><component :is="tile.icon" :size="23" /></span>
-                                    <div>
-                                        <h2 class="text-xs font-medium text-slate-500 sm:text-sm">{{ tile.label }}</h2>
-                                        <Skeleton v-if="loading && !summary" width="3rem" height="1.75rem" class="mt-2" />
-                                        <p v-else class="mt-1 text-2xl font-semibold tracking-tight text-slate-900">{{ summary?.[tile.key]?.toLocaleString() ?? '—' }}</p>
+                        <section aria-label="Report overview" class="grid grid-cols-2 gap-3 lg:grid-cols-4 lg:gap-5">
+                            <Card v-for="tile in tiles" :key="tile.key" class="border border-slate-200/60 shadow-none!" :pt="{ body: { class: 'p-4! lg:p-5!' } }">
+                                <template #content>
+                                    <div class="flex items-center gap-3 lg:gap-4">
+                                        <span class="flex size-10 shrink-0 items-center justify-center rounded-xl lg:size-12" :class="tile.color"><component :is="tile.icon" :size="23" /></span>
+                                        <div>
+                                            <h2 class="text-xs font-medium text-slate-500 sm:text-sm">{{ tile.label }}</h2>
+                                            <Skeleton v-if="loading && !summary" width="3rem" height="1.75rem" class="mt-2" />
+                                            <p v-else class="mt-1 text-2xl font-semibold tracking-tight text-slate-900">{{ summary?.[tile.key]?.toLocaleString() ?? '—' }}</p>
+                                        </div>
                                     </div>
-                                </div>
                             </template>
                         </Card>
                     </section>
@@ -225,6 +239,7 @@ onMounted(() => {
                             <Column field="status" header="Status"><template #body="{ data }"><Tag :severity="statusSeverity[data.status] ?? 'secondary'" :value="label(data.status)" /></template></Column>
                         </DataTable>
                     </section>
+                    </template>
                     <p class="pb-3 text-center text-xs text-slate-400">Small actions. Safer communities. Thank you for doing your part.</p>
                 </div>
             </main>
