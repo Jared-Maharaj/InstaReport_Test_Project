@@ -2,11 +2,14 @@
 
 use App\Http\Controllers\Auth\MagicLinkController;
 use App\Http\Controllers\Auth\SessionController;
+use App\Http\Controllers\Reports\LocationController;
 use App\Http\Controllers\Reports\AreaReportController;
 use App\Http\Controllers\Reports\IncidentReportController;
 use Illuminate\Support\Facades\Route;
 
 Route::view('/', 'app')->name('home');
+
+Route::get('api/locations', LocationController::class)->middleware('auth')->name('locations.search');
 
 Route::prefix('api/auth')->name('auth.')->group(function (): void {
     Route::post('magiclink', [MagicLinkController::class, 'store'])->name('magiclink.request');

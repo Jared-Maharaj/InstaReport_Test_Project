@@ -7,7 +7,6 @@ use Illuminate\Validation\Rule;
 
 class AreaReportIndexRequest extends FormRequest
 {
-    /** @return array<string, mixed> */
     public function rules(): array
     {
         return [

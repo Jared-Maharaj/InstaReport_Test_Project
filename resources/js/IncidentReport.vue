@@ -24,12 +24,14 @@ import Images from '@primeicons/vue/images';
 import Pencil from '@primeicons/vue/pencil';
 import Plus from '@primeicons/vue/plus';
 import Send from '@primeicons/vue/send';
+import MapMarker from '@primeicons/vue/map-marker';
 import Shield from '@primeicons/vue/shield';
 import Spinner from '@primeicons/vue/spinner';
 import Times from '@primeicons/vue/times';
 import Wrench from '@primeicons/vue/wrench';
 
 import IncidentSummary from './IncidentSummary.vue';
+import LocationMap from './LocationMap.vue';
 
 defineProps({ user: Object });
 const emit = defineEmits(['home', 'busy']);
@@ -43,6 +45,13 @@ const saved = ref(null);
 const photos = ref([]);
 const uploader = ref(null);
 const heading = ref(null);
+const locationResults = ref([]);
+const selectedLocation = ref(null);
+const locationLoading = ref(false);
+const locationError = ref('');
+let locationRequest = 0;
+const hasCoordinates = computed(() => Number.isFinite(form.latitude) && Math.abs(form.latitude) <= 90
+    && Number.isFinite(form.longitude) && Math.abs(form.longitude) <= 180);
 const categories = {
     SECURITY: ['BREAK_IN', 'THEFT', 'PHYSICAL_ATTACK', 'OTHER'],
     SERVICE_DELIVERY: ['POTHOLE', 'ELECTRICITY_OUTAGE', 'WATER_OUTAGE', 'OTHER'],
@@ -84,6 +93,55 @@ for (const field of Object.keys(initial())) {
             delete errors.value.longitude;
         }
     });
+}
+
+function clearLocation() {
+    locationRequest++;
+    locationLoading.value = false;
+    locationResults.value = [];
+    selectedLocation.value = null;
+    locationError.value = '';
+    form.latitude = null;
+    form.longitude = null;
+}
+
+async function findLocation() {
+    if (locationLoading.value) return;
+    const address = form.address.trim();
+    locationError.value = '';
+    if (!address || [...address].length > 1000) {
+        errors.value.address = 'Enter an address of up to 1,000 characters to search.';
+        return;
+    }
+    const request = ++locationRequest;
+    locationLoading.value = true;
+    locationResults.value = [];
+    selectedLocation.value = null;
+    try {
+        const response = await fetch(`/api/locations?${new URLSearchParams({ address })}`, {
+            credentials: 'same-origin', headers: { Accept: 'application/json' },
+        });
+        if (request !== locationRequest) return;
+        if (response.status === 401) {
+            window.location.replace('/');
+            return;
+        }
+        if (!response.ok) throw new Error('Lookup failed');
+        const data = await response.json();
+        if (request !== locationRequest) return;
+        locationResults.value = data.data;
+        if (!data.data.length) locationError.value = 'No matching addresses found. Try adding a town or landmark, or continue with your address.';
+    } catch {
+        if (request === locationRequest) locationError.value = 'We couldn’t look up this address. Try again, or enter coordinates manually. You can also continue without them.';
+    } finally {
+        if (request === locationRequest) locationLoading.value = false;
+    }
+}
+
+function selectLocation() {
+    form.address = selectedLocation.value.address;
+    form.latitude = Number(selectedLocation.value.latitude.toFixed(7));
+    form.longitude = Number(selectedLocation.value.longitude.toFixed(7));
 }
 
 function label(value) {
@@ -151,6 +209,7 @@ function clearPhotos() {
 }
 function reset() {
     clearPhotos();
+    clearLocation();
     Object.assign(form, initial());
     saved.value = null;
     errors.value = {};
@@ -217,7 +276,10 @@ async function submitReport() {
         emit('busy', false);
     }
 }
-onBeforeUnmount(clearPhotos);
+onBeforeUnmount(() => {
+    locationRequest++;
+    clearPhotos();
+});
 </script>
 
 <template>
@@ -268,7 +330,21 @@ onBeforeUnmount(clearPhotos);
                             <StepPanel :value="2">
                                 <h2 class="text-lg font-semibold text-slate-900">Where and when?</h2>
                                 <p class="mt-1 text-sm text-slate-500">A descriptive address is enough. Coordinates are optional.</p>
-                                <div class="mt-6"><label for="address" class="field-label">Address or location *</label><InputText id="address" v-model="form.address" maxlength="1000" fluid placeholder="Street address, area, or a nearby landmark" :invalid="!!errors.address" :aria-describedby="errors.address ? 'address-error' : undefined" /><p v-if="errors.address" id="address-error" role="alert" class="field-error">{{ errors.address }}</p></div>
+                                <div class="mt-6">
+                                    <label for="address" class="field-label">Address or location *</label>
+                                    <div class="flex flex-col gap-3 sm:flex-row">
+                                        <InputText id="address" v-model="form.address" maxlength="1000" fluid class="min-w-0 flex-1" placeholder="Street address, area, or a nearby landmark" :invalid="!!errors.address" :aria-describedby="errors.address ? 'address-error' : undefined" @input="clearLocation" />
+                                        <Button type="button" outlined class="shrink-0" :disabled="locationLoading" @click="findLocation"><Spinner v-if="locationLoading" :size="16" spin /><MapMarker v-else :size="16" />{{ locationLoading ? 'Finding…' : 'Find on map' }}</Button>
+                                    </div>
+                                    <p v-if="errors.address" id="address-error" role="alert" class="field-error">{{ errors.address }}</p>
+                                    <div v-if="locationResults.length" class="mt-4">
+                                        <label for="location-match" class="field-label">Choose the matching address</label>
+                                        <Select v-model="selectedLocation" input-id="location-match" :options="locationResults" option-label="address" placeholder="Select an address to place the marker" fluid @change="selectLocation" />
+                                        <p class="mt-2 text-xs text-slate-500">Powered by <a href="https://www.geoapify.com/" target="_blank" rel="noopener" class="underline">Geoapify</a> · © <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener" class="underline">OpenStreetMap</a> contributors</p>
+                                    </div>
+                                    <Message v-if="locationError" severity="warn" class="mt-3">{{ locationError }}</Message>
+                                    <LocationMap v-if="step === 2 && hasCoordinates" v-model:latitude="form.latitude" v-model:longitude="form.longitude" />
+                                </div>
                                 <div class="mt-6 grid gap-5 sm:grid-cols-2">
                                     <div v-for="field in ['latitude', 'longitude']" :key="field"><label :for="field" class="field-label">{{ label(field) }} <span class="font-normal text-slate-400">(optional)</span></label><InputNumber v-model="form[field]" :input-id="field" :use-grouping="false" :max-fraction-digits="7" locale="en-ZA" fluid :placeholder="field === 'latitude' ? 'e.g. -29.5380' : 'e.g. 31.2140'" :invalid="!!errors[field]" :aria-describedby="errors[field] ? `${field}-error` : 'coordinates-help'" /><p v-if="errors[field]" :id="`${field}-error`" role="alert" class="field-error">{{ errors[field] }}</p></div>
                                 </div>
