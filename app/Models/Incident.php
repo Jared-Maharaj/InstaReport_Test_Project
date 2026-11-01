@@ -15,6 +15,18 @@ class Incident extends Model
     /** @use HasFactory<IncidentFactory> */
     use HasFactory;
 
+    public static function generateReference(): string
+    {
+        $alphabet = '23456789ABCDEFGHJKLMNPQRSTUVWXYZ';
+        $reference = 'INC-';
+
+        for ($index = 0; $index < 12; $index++) {
+            $reference .= $alphabet[random_int(0, strlen($alphabet) - 1)];
+        }
+
+        return $reference;
+    }
+
     protected function casts(): array
     {
         return [
