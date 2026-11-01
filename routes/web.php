@@ -2,6 +2,7 @@
 
 use App\Http\Controllers\Auth\MagicLinkController;
 use App\Http\Controllers\Auth\SessionController;
+use App\Http\Controllers\Reports\AreaReportController;
 use App\Http\Controllers\Reports\IncidentReportController;
 use Illuminate\Support\Facades\Route;
 
@@ -24,4 +25,11 @@ Route::prefix('api/cases')->middleware('auth')->name('incidents.')->group(functi
     Route::get('{reference}/photos/{photo}', [IncidentReportController::class, 'photo'])
         ->whereNumber('photo')
         ->name('photos.show');
+});
+
+Route::prefix('api/area/reports')->middleware(['auth', 'can:view-area-reports'])->name('area.reports.')->group(function (): void {
+    Route::get('/', [AreaReportController::class, 'index'])->name('index');
+    Route::get('{reference}', [AreaReportController::class, 'show'])->name('show');
+    Route::get('{reference}/photos/{photo}', [AreaReportController::class, 'photo'])
+        ->whereNumber('photo')->name('photos.show');
 });

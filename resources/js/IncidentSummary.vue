@@ -8,12 +8,13 @@ import CheckCircle from '@primeicons/vue/check-circle';
 import Copy from '@primeicons/vue/copy';
 import Download from '@primeicons/vue/download';
 
-const props = defineProps({ incident: { type: Object, required: true }, user: Object, downloadPhotos: Boolean });
+const props = defineProps({ incident: { type: Object, required: true }, user: Object, downloadPhotos: Boolean, casesEndpoint: { type: String, default: '/api/cases' } });
 const copyFeedback = ref('');
 const downloading = ref(null);
 const downloadError = ref('');
 const statusSeverity = { OPEN: 'warn', IN_PROGRESS: 'info', RESOLVED: 'success', CLOSED: 'secondary' };
 const dateFormat = new Intl.DateTimeFormat('en-ZA', { dateStyle: 'medium', timeStyle: 'short' });
+const reporter = computed(() => props.incident.reporter ?? props.user);
 const sections = computed(() => [
     { title: 'Incident details', rows: [
         ['Type', label(props.incident.type)], ['Category', label(props.incident.category)],
@@ -25,10 +26,11 @@ const sections = computed(() => [
         ['Coordinates', props.incident.latitude != null && props.incident.longitude != null ? `${props.incident.latitude}, ${props.incident.longitude}` : 'Not provided'],
         ['Occurred at', formatDate(props.incident.occurred_at)],
         ['Reported at', formatDate(props.incident.created_at)],
-        ['Reported by', props.user?.name || props.user?.email || 'Your account'],
+        ['Reported by', reporter.value?.name || reporter.value?.email || 'Your account'],
+        ...(props.incident.reporter ? [['Reporter email', props.incident.reporter.email]] : []),
     ] },
 ]);
-const photoUrl = (photo) => `/api/cases/${encodeURIComponent(props.incident.reference)}/photos/${photo.id}`;
+const photoUrl = (photo) => `${props.casesEndpoint}/${encodeURIComponent(props.incident.reference)}/photos/${photo.id}`;
 const previews = computed(() => props.incident.photos.map(photo => ({ name: photo.original_name || 'Incident photo', src: photoUrl(photo) })));
 
 function label(value) {
