@@ -52,7 +52,7 @@ MAIL_PASSWORD={your_mailtrap_password}
 
 ## Key Implementation Decisions
 
-**Custom authentication logic:** token issuance/verification and login throttling are implemented through custom logic, with no use of Laravel's built-in functions. I do use Laravel's built-in sessions, cryptographic, and notification utilities for simplicity. CSRF middleware protects against state-changing requests
+**Custom authentication logic:** token issuance/verification and login throttling are implemented through custom logic, with no use of Laravel's built-in functions. Sessions, cryptographic, and notification utilities for simplicity, as they are not prohibited by the spec. CSRF middleware protects against state-changing requests
 
 **Secure tokens:** Tokens contain 32 cryptographically random bytes, are stored only as SHA256 hashes, and expire after 15 minutes. Successful authentication invalidates outstanding links and regenerates the session and CSRF.
 
