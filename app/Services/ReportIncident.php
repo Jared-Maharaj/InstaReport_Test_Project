@@ -5,6 +5,7 @@ namespace App\Services;
 use App\Events\IncidentReported;
 use App\Models\Incident;
 use App\Models\User;
+use Illuminate\Database\UniqueConstraintViolationException;
 use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\DB;
@@ -22,8 +23,8 @@ class ReportIncident
 
         try {
             $incident = DB::transaction(function () use ($reporter, $data, $photos, $disk, &$paths): Incident {
-                $incident = Incident::query()->create([
-                    'reference' => 'INC-'.Str::ulid(),
+                $incident = retry(3, fn (): Incident => DB::transaction(fn (): Incident => Incident::query()->create([
+                    'reference' => Incident::generateReference(),
                     'reporter_id' => $reporter->id,
                     'type' => $data['type'],
                     'category' => $data['category'],
@@ -34,7 +35,7 @@ class ReportIncident
                     'latitude' => $data['latitude'] ?? null,
                     'longitude' => $data['longitude'] ?? null,
                     'occurred_at' => Carbon::parse($data['occurred_at'])->utc(),
-                ]);
+                ])), 0, fn (Throwable $exception): bool => $exception instanceof UniqueConstraintViolationException);
 
                 foreach ($photos as $photo) {
                     $directory = 'incidents/'.$incident->reference;
