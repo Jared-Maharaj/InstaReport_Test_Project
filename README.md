@@ -33,20 +33,39 @@ The script installs dependencies, copies .env.example to .env, generates an appl
 
 ## Features
 
-**Passwordless sign-in:** request a single-use magic link sent to a registered email address. Open it to access the dashboard. Only existing users can sign in.
+ - **Passwordless sign-in:** request a single-use magic link sent to a registered email address. Open it to access the dashboard. Only existing users can sign in.
 
-**Guided reporting:** enter incident details, location and time, optional photos, then review before submitting. Confirmation includes the tracking reference and a copy action.
+ - **Guided reporting:** enter incident details, location and time, optional photos, then review before submitting. Confirmation includes the tracking reference and a copy action.
 
-**Location assistance:** search an address, select a match, and refine coordinates by dragging the map marker. A street name may not be enough ;D
+ - **Location assistance:** search an address, select a match, and refine coordinates by dragging the map marker. A street name may not be enough ;D
 
-**Personal dashboard:** view submitted reports with pagination, open full details, and download individual attachments.
+ - **Personal dashboard:** view submitted reports with pagination, open full details, and download individual attachments.
 
-**Area Reports:**  only managers can view all reports with reporter details. HIGH severity reports appear first.
+ - **Area Reports:**  only managers can view all reports with reporter details. HIGH severity reports appear first.
 
-**High-severity alerts:** every Area Manager receives an email when a HIGH severity Security report is submitted.
+ - **High-severity alerts:** every Area Manager receives an email when a HIGH severity Security report is submitted.
 
 
 ## Key Implementation Decisions
+
+**Custom authentication logic:** token issuance/verification and login throttling are implemented through custom logic, with no use of Laravel's built-in functions. I do use Laravel's built-in sessions, cryptographic, and notification utilities for simplicity. CSRF middleware protects against state-changing requests
+
+**Secure tokens:** Tokens contain 32 cryptographically random bytes, are stored only as SHA256 hashes, and expire after 15 minutes. Successful authentication invalidates outstanding links and regenerates the session and CSRF.
+
+**Scheduled token cleanup:** a daily task deletes magic-link tokens that expired at least 24 hours earlier, keeping the token table small. Production environment should have a larger window, but 24hs is just for demonstration.
+
+**Same-origin application:** Laravel backend and Vue3 frontend packed as one complete application with a setup script to boot!
+
+**Minimal operational requirements:** SQLite and local media storage purposefully avoid additional infrastructure. I've tried to keep the implementation lightweight while addressing the requirements and considering high-impact quality-of-life inclusions.
+
+**Additional packages:** I have added PrimeVue support with Aura Theme for frontend development support and component consistency. MailTrap is used as a mail host, with a limited api key. LeafletJs with OpenStreetMap tiles and GeoApify are used for location handling, backed by a single endpoint for lookups.
+
+**Explicit boundaries:** Ordinary case endpoints always enforce ownership, I created a dedicated manager endpoint that returns all cases after verifying identity and role. Additionally, ONLY area managers will recieve email notifications regarding HIGH severity cases.
+
+**Backend-owned validation:**  incident report categories depend on type and severity is required only for Security. Photos and latitude/ longitude coordinates are optional, as they provide useful detail but may not always be available.
+
+**Shared UI:** The frontend reuses alot of the same code as many components like the DataTable are reused accross different forms. This keeps things clean and modular while reducing duplication.
+
 
 
 ## API Overview
