@@ -31,6 +31,10 @@ bash setup.sh
 
 The script installs dependencies, copies .env.example to .env, generates an application key, initializes SQLite, seeds users, builds Vue, and starts the application and scheduler. Open **http://127.0.0.1:8000** when complete/ press **Ctrl+C** to stop.
 
+**NOTE:** Mailing is setup with my own API key - meaning emails will come to my mailtrap sandbox. To test this application in ones own environment, navigate to https://mailtrap.io/ and signup. Setup a sandbox environment, generate username & password, and replace the following in .env:
+MAIL_USERNAME={your_mailtrap_username}
+MAIL_PASSWORD={your_mailtrap_password}
+
 ## Features
 
  - **Passwordless sign-in:** request a single-use magic link sent to a registered email address. Open it to access the dashboard. Only existing users can sign in.
